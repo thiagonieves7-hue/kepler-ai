@@ -64,9 +64,25 @@ const store={get:(k,d='')=>{try{return localStorage.getItem('kepler_'+k)??d}catc
    POST {message, history} -> JSON {reply}. Cambia aquí si tu servidor usa otro formato. */
 const KEPLER={async ask(message,history){
   const url=store.get('api').trim()||'/.netlify/functions/kepler';
-  if(!url){await new Promise(r=>setTimeout(r,2600));return ['Sistemas en línea. Estoy en modo demostración.','Entendido. Conecta mi API en configuración y responderé con mi mente real.','Recibí tu mensaje. Cuando me conectes a mi servidor, podré razonar, recordar y usar mis herramientas contigo.'][rnd()*3|0]}
-  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,history})});
-  if(!r.ok)throw new Error(r.status);const d=await r.json();return d.reply??d.respuesta??d.text??'…'}};
+
+  const r=await fetch(url,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({message,history})
+  });
+
+  const d=await r.json().catch(()=>({}));
+
+  if(!r.ok){
+    throw new Error(
+      d?.error
+        ? `${d.error}${d.status ? ' | HTTP '+d.status : ''}${d.details ? ' | '+JSON.stringify(d.details) : ''}`
+        : `HTTP ${r.status}`
+    );
+  }
+
+  return d.reply??d.respuesta??d.text??'…';
+}};
 
 /* ===== ESCENA ===== */
 const small=matchMedia('(max-width:700px)').matches,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
