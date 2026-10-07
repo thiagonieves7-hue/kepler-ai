@@ -45,9 +45,14 @@ export default async (req) => {
 
     const data = await response.json();
     if (!response.ok) {
-      console.error('OpenAI error:', JSON.stringify(data));
-      return json({ error: 'La IA no pudo procesar la solicitud.' }, response.status);
-    }
+  console.error('OpenAI error:', JSON.stringify(data));
+
+  return json({
+    error: 'OpenAI rechazó la solicitud.',
+    status: response.status,
+    details: data
+  }, response.status);
+}
 
     const reply = typeof data.output_text === 'string' ? data.output_text.trim() : '';
     if (!reply) return json({ error: 'La IA devolvió una respuesta vacía.' }, 502);
