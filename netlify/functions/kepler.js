@@ -12,50 +12,52 @@ export default async (req) => {
     const message = typeof body?.message === 'string' ? body.message.trim() : '';
     const history = Array.isArray(body?.history) ? body.history : [];
 
-    if (!message) return json({ error: 'Mensaje vacío' }, 400);
-    if (!process.env.OPENAI_API_KEY) {
-      return json({ error: 'OPENAI_API_KEY no está configurada en Netlify.' }, 500);
+    if (!message) return json({ error: 'Mensaje vacio' }, 400);
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return json({ error: 'ANTHROPIC_API_KEY no esta configurada en Netlify.' }, 500);
     }
 
-    const safeHistory = history
+    let safeHistory = history
       .filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string')
       .slice(-20)
       .map(x => ({ role: x.role, content: x.content.slice(0, 4000) }));
 
-    // Evitamos duplicar el último mensaje si el frontend ya lo incluyó en history.
-    const input = safeHistory.length &&
-      safeHistory[safeHistory.length - 1].role === 'user' &&
-      safeHistory[safeHistory.length - 1].content === message
+    while (safeHistory.length && safeHistory[0].role !== 'user') safeHistory.shift();
+
+    const last = safeHistory[safeHistory.length - 1];
+    const messages = last && last.role === 'user' && last.content === message
       ? safeHistory
       : [...safeHistory, { role: 'user', content: message }];
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'gpt-6-luna',
-        instructions: `Eres KEPLER, un asistente personal de inteligencia artificial con personalidad de mayordomo futurista. Responde en español salvo que el usuario use otro idioma. Sé elegante, tranquilo, preciso y útil. No digas que eres ChatGPT; preséntate como KEPLER. No inventes capacidades que no tengas. Mantén las respuestas relativamente concisas porque serán leídas en voz alta por una voz de mayordomo.`,
-        input,
-        max_output_tokens: 700
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 700,
+        system: 'Eres KEPLER, un asistente personal de inteligencia artificial con personalidad de mayordomo futurista. Responde en espanol salvo que el usuario use otro idioma. Se elegante, tranquilo, preciso y util. Presentate como KEPLER. No inventes capacidades que no tengas. Manten las respuestas relativamente concisas porque seran leidas en voz alta por una voz de mayordomo.',
+        messages
       })
     });
 
     const data = await response.json();
     if (!response.ok) {
-  console.error('OpenAI error:', JSON.stringify(data));
+      console.error('Anthropic error:', JSON.stringify(data));
+      return json({
+        error: 'Anthropic rechazo la solicitud.',
+        status: response.status,
+        details: data
+      }, response.status);
+    }
 
-  return json({
-    error: 'OpenAI rechazó la solicitud.',
-    status: response.status,
-    details: data
-  }, response.status);
-}
-
-    const reply = typeof data.output_text === 'string' ? data.output_text.trim() : '';
-    if (!reply) return json({ error: 'La IA devolvió una respuesta vacía.' }, 502);
+    const reply = Array.isArray(data.content)
+      ? data.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
+      : '';
+    if (!reply) return json({ error: 'La IA devolvio una respuesta vacia.' }, 502);
 
     return json({ reply });
   } catch (err) {
